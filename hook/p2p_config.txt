@@ -1,0 +1,9 @@
+# P2P Network Configuration
+# 模式: server (监听) 或 client (连接)
+mode=client
+
+# 服务端IP地址 (仅client模式使用)
+ip=127.0.0.1
+
+# 端口号
+port=27015
