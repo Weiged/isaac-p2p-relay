@@ -632,24 +632,6 @@ std::string GetProcessDirectory() {
     return "";
 }
 
-// 注入线程函数
-DWORD WINAPI InjectionThread(LPVOID lpParam) {
-    // 等待10秒
-    Sleep(10000);
-    
-    // 构建 p2p_hook.dll 的完整路径
-    std::string dllPath = GetProcessDirectory() + "p2p_hook.dll";
-    
-    // 加载 DLL
-    HMODULE hDll = LoadLibraryA(dllPath.c_str());
-    if (hDll == NULL) {
-        // 可选：记录错误日志
-        // OutputDebugStringA(("Failed to load: " + dllPath).c_str());
-    }
-    
-    return 0;
-}
-
 BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserved) {
     static HMODULE hOriginalDll = NULL;
    
