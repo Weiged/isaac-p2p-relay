@@ -80,6 +80,9 @@ add_custom_command(TARGET p2p_hook POST_BUILD
     COMMENT "Copying p2p_config.txt to output directory"
 )
 
+# version.dll proxy
+add_subdirectory(version)
+
 # Reconnect integration test (Windows only)
 if(WIN32)
     add_executable(p2p_reconnect_test tests/reconnect_integration_test.cpp)

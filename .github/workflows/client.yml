@@ -2,7 +2,7 @@ name: Client (Windows)
 
 on:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "version_dll" ]
     tags:
       - "v*"
   pull_request:
