@@ -219,16 +219,7 @@ bool HOOK_CALL Hook_IsP2PPacketAvailable(void* thisptr,
     // 调用原函数
     auto pfnOriginal = reinterpret_cast<FnIsP2PPacketAvailable>(g_pOriginalVTable[VTABLE_INDEX_IsP2PPacketAvailable]);
     bool originalResult = pfnOriginal(thisptr, pcubMsgSize, nChannel);
-    
-    if (originalResult && pcubMsgSize) {
-        uint32 cubDest = *pcubMsgSize;
-        g_originalReadData.resize(cubDest);
-        auto xfnOriginal = reinterpret_cast<FnReadP2PPacket>(g_pOriginalVTable[VTABLE_INDEX_ReadP2PPacket]);
-        xfnOriginal(thisptr, g_originalReadData.data(), cubDest, &g_originalReadSize, &g_originalReadSteamID, nChannel);
-        g_originalReadData.clear();
-        TraceDebug("IsP2PPacketAvailable Original Success Size: %u bytes %u", g_originalReadSize, g_originalReadSteamID);
-    }
-    
+
     P2P_RunCallbacks();
     
     // 检查 TCP 是否有数据
@@ -271,8 +262,9 @@ bool HOOK_CALL Hook_IsP2PPacketAvailable(void* thisptr,
         }
         return true;
     }
-    
-    return false;
+
+    // 没有 TCP 数据时，保持原逻辑
+    return originalResult;
 }
 
 // bool ISteamNetworking::ReadP2PPacket(void *pubDest, uint32 cubDest, uint32 *pcubMsgSize, CSteamID *psteamIDRemote, int nChannel = 0)
@@ -306,8 +298,10 @@ bool HOOK_CALL Hook_ReadP2PPacket(void* thisptr,
         
         return true;
     }
-    
-    return false;
+
+    // 没有 TCP 数据时，转发原函数
+    auto pfnOriginal = reinterpret_cast<FnReadP2PPacket>(g_pOriginalVTable[VTABLE_INDEX_ReadP2PPacket]);
+    return pfnOriginal(thisptr, pubDest, cubDest, pcubMsgSize, psteamIDRemote, nChannel);
 }
 
 // 本地 CSteamID (从原函数调用中记录)
@@ -322,7 +316,7 @@ bool HOOK_CALL Hook_SendP2PPacket(void* thisptr,
 {
     // 先调用原函数
     auto pfnOriginal = reinterpret_cast<FnSendP2PPacket>(g_pOriginalVTable[VTABLE_INDEX_SendP2PPacket]);
-    bool originalResult = pfnOriginal(thisptr, steamIDRemote, pubData, 8, eP2PSendType, nChannel); // 只发送8个字节保持心跳
+    bool originalResult = pfnOriginal(thisptr, steamIDRemote, pubData, cubData, eP2PSendType, nChannel);
     
     P2PPeerID targetPeer = g_connectedPeer;
     
