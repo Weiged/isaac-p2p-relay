@@ -1,7 +1,25 @@
 #include <windows.h>
 
+#include <cstdarg>
+#include <cstdio>
 #include <string>
 #include <algorithm>
+
+ static void DebugLogA(const char* fmt, ...)
+ {
+     char buffer[1024];
+     va_list args;
+     va_start(args, fmt);
+     vsnprintf(buffer, sizeof(buffer), fmt, args);
+     va_end(args);
+     OutputDebugStringA(buffer);
+ }
+
+ static void DebugLogLastErrorA(const char* prefix)
+ {
+     DWORD err = GetLastError();
+     DebugLogA("%s GetLastError=%lu\n", prefix, static_cast<unsigned long>(err));
+ }
 
 struct version_dll
 {
@@ -199,6 +217,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
+        DebugLogA("[version-proxy] DLL_PROCESS_ATTACH module=%p\n", hModule);
         {
             char systemPath[MAX_PATH];
             GetSystemDirectoryA(systemPath, MAX_PATH);
@@ -207,16 +226,31 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
             hOriginalDll = LoadLibraryA(systemPath);
             if (hOriginalDll) {
                 version.LoadOriginalLibrary(hOriginalDll);
+                DebugLogA("[version-proxy] Loaded original version.dll: %s module=%p\n", systemPath, hOriginalDll);
+            } else {
+                DebugLogA("[version-proxy] Failed to load original version.dll: %s\n", systemPath);
+                DebugLogLastErrorA("[version-proxy] LoadLibraryA(original version.dll) failed.");
             }
         }
 
         if (IsTargetProcess("isaac-ng.exe")) {
             std::string dllPath = GetProcessDirectory() + "p2p_hook.dll";
-            LoadLibraryA(dllPath.c_str());
+            DebugLogA("[version-proxy] Target process matched. Loading hook: %s\n", dllPath.c_str());
+            SetLastError(0);
+            HMODULE hHook = LoadLibraryA(dllPath.c_str());
+            if (hHook) {
+                DebugLogA("[version-proxy] Loaded p2p_hook.dll: module=%p\n", hHook);
+            } else {
+                DebugLogA("[version-proxy] Failed to load p2p_hook.dll: %s\n", dllPath.c_str());
+                DebugLogLastErrorA("[version-proxy] LoadLibraryA(p2p_hook.dll) failed.");
+            }
+        } else {
+            DebugLogA("[version-proxy] Not target process. Skipping hook load.\n");
         }
         break;
 
     case DLL_PROCESS_DETACH:
+        DebugLogA("[version-proxy] DLL_PROCESS_DETACH module=%p\n", hModule);
         if (hOriginalDll) {
             FreeLibrary(hOriginalDll);
         }

@@ -2,6 +2,7 @@
 #include <cstdio>
 #include <cstring>
 #include <cstdint>
+#include <cstdarg>
 #include <fstream>
 #include <string>
 #include <vector>
@@ -102,6 +103,22 @@ DEFINE_TRACE_FUNC(TraceDebugImpl, "Debug", TRACE_LEVEL_VERBOSE)
 #define TraceDebug(fmt, ...) ((void)0)
 
 #endif
+
+ static void DebugLogA(const char* fmt, ...)
+ {
+     char buffer[1024];
+     va_list args;
+     va_start(args, fmt);
+     vsnprintf(buffer, sizeof(buffer), fmt, args);
+     va_end(args);
+     OutputDebugStringA(buffer);
+ }
+
+ static void DebugLogLastErrorA(const char* prefix)
+ {
+     DWORD err = GetLastError();
+     DebugLogA("%s GetLastError=%lu\n", prefix, static_cast<unsigned long>(err));
+ }
 
 // 读取配置文件
 bool LoadConfig() {
@@ -482,33 +499,57 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
     switch (ul_reason_for_call) {
     case DLL_PROCESS_ATTACH:
         DisableThreadLibraryCalls(hModule);
+
+        DebugLogA("[p2p_hook] DLL_PROCESS_ATTACH module=%p\n", hModule);
         
         // 注册 TraceLogging Provider
         TraceLoggingRegister(g_hTraceProvider);
         
-        LoadConfig();
+        if (!LoadConfig()) {
+            DebugLogA("[p2p_hook] LoadConfig failed (p2p_config.txt not found).\n");
+        } else {
+            DebugLogA("[p2p_hook] LoadConfig ok. remote=%s port=%u\n", g_strRemoteIP.c_str(), static_cast<unsigned>(g_nPort));
+        }
         
         if (P2P_Init() != P2P_OK) {
             TraceError("P2P Init Error P2P_Init failed");
+            DebugLogA("[p2p_hook] P2P_Init failed.\n");
             return FALSE;
         }
+
+        DebugLogA("[p2p_hook] P2P_Init ok.\n");
         
         P2P_SetConnectionCallback(ConnectionCallback, nullptr);
 
         if (P2P_Connect(g_strRemoteIP.c_str(), g_nPort, &g_connectedPeer) != P2P_OK) {
             TraceError("P2P Connect Error Connect to %s:%u failed", g_strRemoteIP.c_str(), g_nPort);
+            DebugLogA("[p2p_hook] P2P_Connect failed to %s:%u\n", g_strRemoteIP.c_str(), static_cast<unsigned>(g_nPort));
         } else {
             TraceInfo("P2P Debug Mode Client mode\nConnected to: %s:%u\nPeerID: %u", 
                 g_strRemoteIP.c_str(), g_nPort, g_connectedPeer);
+
+            DebugLogA("[p2p_hook] P2P_Connect ok. peer=%u remote=%s:%u\n", g_connectedPeer, g_strRemoteIP.c_str(), static_cast<unsigned>(g_nPort));
 
             P2P_SetAutoReconnect(g_connectedPeer, true, 500, 10 * 1000);
         }
 
         g_stopPumpThread.store(false);
         g_hPumpThread = CreateThread(NULL, 0, PumpThread, NULL, 0, NULL);
+        if (!g_hPumpThread) {
+            DebugLogA("[p2p_hook] CreateThread(PumpThread) failed.\n");
+            DebugLogLastErrorA("[p2p_hook] CreateThread(PumpThread) failed.");
+        } else {
+            DebugLogA("[p2p_hook] PumpThread started.\n");
+        }
         
         // 创建线程，初始化完成后注入 VTable
         hInjectionThread = CreateThread(NULL, 0, InjectionThread, NULL, 0, NULL);
+        if (!hInjectionThread) {
+            DebugLogA("[p2p_hook] CreateThread(InjectionThread) failed.\n");
+            DebugLogLastErrorA("[p2p_hook] CreateThread(InjectionThread) failed.");
+        } else {
+            DebugLogA("[p2p_hook] InjectionThread started.\n");
+        }
         break;
         
     case DLL_THREAD_ATTACH:
@@ -516,6 +557,7 @@ BOOL APIENTRY DllMain(HMODULE hModule, DWORD ul_reason_for_call, LPVOID lpReserv
         break;
         
     case DLL_PROCESS_DETACH:
+        DebugLogA("[p2p_hook] DLL_PROCESS_DETACH module=%p\n", hModule);
         if (g_connectedPeer != P2P_INVALID_PEER_ID) {
             P2P_SetAutoReconnect(g_connectedPeer, false, 0, 0);
             P2P_Disconnect(g_connectedPeer);
