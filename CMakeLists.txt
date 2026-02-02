@@ -83,6 +83,9 @@ add_custom_command(TARGET p2p_hook POST_BUILD
 # version.dll proxy
 add_subdirectory(version)
 
+# dinput8.dll proxy
+add_subdirectory(dinput8)
+
 # Reconnect integration test (Windows only)
 if(WIN32)
     add_executable(p2p_reconnect_test tests/reconnect_integration_test.cpp)
